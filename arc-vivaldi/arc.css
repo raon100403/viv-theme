@@ -1,0 +1,414 @@
+/* ==========================================================================
+   Arc-inspired Vivaldi UI — arc.css
+   Version   : 1.0.0  (2026-10-10)
+   Verified  : Vivaldi 8.2.4133.83 stable (Chromium 152), Linux (Fedora 44, KDE Wayland)
+   Layout    : Settings > Appearance > Layout > "Vertical Left" (tabs-left)
+   Load      : Settings > Appearance > Custom UI Modifications → this folder
+               (vivaldi://experiments → "Allow CSS modifications" must be on)
+
+   Ground rules followed by this file
+   - Only selectors confirmed in the live Vivaldi 8.2 UI DOM (see selector-audit.md).
+   - Never overrides the JS-computed tab geometry (--PositionX/Y, --Width, --Height):
+     tab slot pitch, favorites tile size and sidebar width stay under Vivaldi's control,
+     so drag & drop, hit-testing and keyboard order are untouched.
+   - No element is hidden (no display:none). No visual reordering (no order / absolute moves).
+   - Only one pseudo element is added: the visible label of the real "New Tab" button.
+   - !important is used exactly twice (#browser background), because Vivaldi writes
+     background-* as inline styles on #browser.
+   ========================================================================== */
+
+
+/* --------------------------------------------------------------------------
+   0. USER TOGGLES  — edit these values, save, restart Vivaldi.
+   They live on <body> so that @container style() can read them for #browser.
+   -------------------------------------------------------------------------- */
+body {
+  --arc-palette-mode: arc;   /* arc   = Arc-like neutral palette with a soft tint (default)
+                                theme = take all colours from the active Vivaldi theme   */
+  --arc-compact: 0;          /* 1 = compact spacing / 12px text                           */
+}
+
+
+/* --------------------------------------------------------------------------
+   1. DESIGN TOKENS  (light defaults; dark values are in section 10)
+   -------------------------------------------------------------------------- */
+#browser {
+  /* Space tint presets — pick one in --arc-tint below. */
+  --arc-tint-lavender: #8b7cf6;
+  --arc-tint-slate:    #64748b;
+  --arc-tint-sage:     #7c9a82;
+  --arc-tint-peach:    #f0a07a;
+  --arc-tint-neutral:  #808080;
+  --arc-tint: var(--arc-tint-lavender);
+  --arc-tint-strength: 5%;          /* 0% = pure Arc grey, 10–14% = "pastel space" look */
+
+  /* Surfaces (light values measured from arc.net/zero-chrome.png, see references.md) */
+  --arc-frame-base:     #ececec;
+  --arc-frame-bg:       color-mix(in oklab, var(--arc-tint) var(--arc-tint-strength), var(--arc-frame-base));
+  --arc-sidebar-bg:     var(--arc-frame-bg);
+  --arc-input-bg:       rgb(0 0 0 / .055);   /* ≈ #dfdfdf on #ececec */
+  --arc-tile-bg:        rgb(0 0 0 / .055);
+  --arc-hover-bg:       rgb(0 0 0 / .045);
+  --arc-pressed-bg:     rgb(0 0 0 / .08);
+  --arc-active-tab-bg:  rgb(255 255 255 / .9); /* ≈ #fbfbfb */
+  --arc-divider:        rgb(0 0 0 / .07);
+  --arc-popover-bg:     #fbfbfc;
+
+  /* Text */
+  --arc-text-primary:   #1d1d1f;
+  --arc-text-secondary: #3a3a3c;
+  --arc-text-muted:     #86868b;
+
+  /* Accent & effects */
+  --arc-accent:         color-mix(in oklab, var(--arc-tint) 85%, #000);
+  --arc-focus-ring:     color-mix(in srgb, var(--arc-accent) 55%, transparent);
+  --arc-active-shadow:  0 1px 2px rgb(0 0 0 / .08), 0 0 0 .5px rgb(0 0 0 / .05);
+  --arc-content-shadow: 0 0 0 .5px rgb(0 0 0 / .08), 0 1px 4px rgb(0 0 0 / .08);
+  --arc-popover-shadow: 0 0 0 .5px rgb(0 0 0 / .1), 0 8px 24px rgb(0 0 0 / .14);
+
+  /* Geometry */
+  --arc-sidebar-width:  258px;   /* informational only — set by dragging the sidebar edge (README §3) */
+  --arc-tab-height:     30px;    /* informational only — slot pitch 33px is computed by Vivaldi      */
+  --arc-ui-gap:         8px;     /* space around the web content card */
+  --arc-sidebar-pad:    6px;
+  --arc-tab-inset:      5px;     /* visual inset of tab rows inside their slot */
+  --arc-tab-radius:     8px;
+  --arc-active-radius:  9px;
+  --arc-button-radius:  8px;
+  --arc-input-radius:   10px;
+  --arc-tile-radius:    10px;
+  --arc-popover-radius: 12px;
+  --arc-content-radius: 10px;
+
+  /* Type (system UI font is kept; only size/weight are tuned) */
+  --arc-font-size:      13px;
+  --arc-font-weight:    600;   /* Arc sidebar titles are semibold */
+
+  /* Motion */
+  --arc-motion-duration: 160ms;
+  --arc-motion-ease:     cubic-bezier(.2, 0, 0, 1);
+}
+
+
+/* --------------------------------------------------------------------------
+   2. GLOBAL FRAME — one continuous surface, page shown as a rounded card
+   -------------------------------------------------------------------------- */
+@container style(--arc-palette-mode: arc) {
+  #browser.tabs-left {
+    /* Vivaldi writes background-color/-image inline on #browser → !important needed. */
+    background-color: var(--arc-frame-bg) !important;
+    background-image: none !important;
+  }
+  /* Vivaldi rounds the page with an inverse-corner mask painted in the frame colour.
+     Repaint it with our frame colour so the corners blend. */
+  #browser.tabs-left:not(.fullscreen) #webpage-stack::after {
+    background-color: var(--arc-frame-bg);
+    background-image: none;
+  }
+}
+#browser.tabs-left .tabbar-wrapper { background-color: transparent; }
+
+/* Themes without the "Unified" colour position (e.g. colorPosition "" / accent behind
+   tabs): Vivaldi paints the tab bar and the page area itself and skips the rounding mask. */
+@container style(--arc-palette-mode: arc) {
+  #browser.tabs-left #tabs-tabbar-container,
+  #browser.tabs-left:not(.unified-ui) #webview-container { background-color: transparent; }
+}
+#browser.tabs-left:not(.unified-ui, .fullscreen) #webpage-stack { overflow: clip; }
+
+#browser.tabs-left:not(.fullscreen) #webpage-stack {
+  margin: var(--arc-ui-gap) var(--arc-ui-gap) var(--arc-ui-gap) 0;
+  border-radius: var(--arc-content-radius);
+  box-shadow: var(--arc-content-shadow);
+}
+/* Sidebar auto-hidden (Mode B): the card also needs a left gap. */
+#browser.tabs-left:not(.fullscreen):not(:has(#main > .inner > .tabbar-wrapper)) #webpage-stack {
+  margin-left: var(--arc-ui-gap);
+}
+#browser.tabs-left:not(.fullscreen) #webpage-stack::after {
+  --mask-box-radius: var(--arc-content-radius);
+}
+
+
+/* --------------------------------------------------------------------------
+   3. SIDEBAR LAYOUT
+   -------------------------------------------------------------------------- */
+#browser.tabs-left #tabs-tabbar-container { color: var(--arc-text-primary); box-shadow: none; }
+#browser.tabs-left #tabs-container .toolbar-vertical { padding-inline: var(--arc-sidebar-pad); }
+#browser.tabs-left #tabs-container .toolbar-tabbar-before { padding-bottom: calc(var(--arc-sidebar-pad) + 4px); }
+
+
+/* --------------------------------------------------------------------------
+   4. NAVIGATION / ADDRESS BAR (the real Vivaldi address field, placed in the
+      tab bar by the Vertical Left layout / Toolbar Editor)
+   -------------------------------------------------------------------------- */
+#browser.tabs-left #tabs-container .toolbar-vertical .button-toolbar > .ToolbarButton-Button {
+  border-radius: var(--arc-button-radius);
+  color: var(--arc-text-secondary);
+  transition: background-color var(--arc-motion-duration) var(--arc-motion-ease);
+}
+#browser.tabs-left #tabs-container .toolbar-vertical .button-toolbar > .ToolbarButton-Button:hover  { background-color: var(--arc-hover-bg); }
+#browser.tabs-left #tabs-container .toolbar-vertical .button-toolbar > .ToolbarButton-Button:active { background-color: var(--arc-pressed-bg); }
+
+#browser.tabs-left #tabs-tabbar-container #tabs-container .UrlBar-AddressField {
+  background-color: var(--arc-input-bg);
+  border-color: transparent;
+  border-radius: var(--arc-input-radius);
+  color: var(--arc-text-secondary);
+  transition: background-color var(--arc-motion-duration) var(--arc-motion-ease),
+              box-shadow var(--arc-motion-duration) var(--arc-motion-ease);
+}
+#browser.tabs-left #tabs-tabbar-container #tabs-container .UrlBar-AddressField:hover { background-color: var(--arc-pressed-bg); }
+#browser.tabs-left #tabs-tabbar-container #tabs-container .UrlBar-AddressField:focus-within {
+  background-color: var(--arc-active-tab-bg);
+  box-shadow: 0 0 0 2px var(--arc-focus-ring);
+}
+#browser.tabs-left #tabs-tabbar-container #tabs-container .UrlBar-AddressField #urlFieldInput { color: var(--arc-text-primary); }
+#browser.tabs-left #tabs-tabbar-container #tabs-container .UrlBar-AddressField #urlFieldInput::placeholder { color: var(--arc-text-muted); }
+#browser.tabs-left #tabs-tabbar-container #tabs-container .UrlBar-AddressField .UrlFragment--Highlight { color: var(--arc-text-primary); }
+#browser.tabs-left #tabs-tabbar-container #tabs-container .UrlBar-AddressField .UrlFragment--Lowlight  { color: var(--arc-text-muted); }
+
+/* Page-action icons (feed, reader, translate, bookmark…) stay visible and clickable but are
+   quieter until the field is hovered/focused. The site-info (security) group is never dimmed. */
+#browser.tabs-left #tabs-tabbar-container #tabs-container .UrlBar-AddressField .toolbar-insideinput:not(:has(.SiteInfoButton)) {
+  opacity: .6;
+  transition: opacity var(--arc-motion-duration) var(--arc-motion-ease);
+}
+#browser.tabs-left #tabs-tabbar-container #tabs-container .UrlBar-AddressField:is(:hover, :focus-within) .toolbar-insideinput { opacity: 1; }
+
+
+/* --------------------------------------------------------------------------
+   5. FAVORITES / PINNED TABS
+   With vivaldi://experiments → "Horizontal pinned tabs in vertical tab bars" Vivaldi
+   lays pinned tabs out as an icon grid (.pinned-group); these rules turn it into
+   Arc-style favorite tiles. Without the experiment, pinned tabs stay a list and the
+   native separator is restyled.
+   -------------------------------------------------------------------------- */
+#browser.tabs-left #tabs-tabbar-container .tab-wrapper.in-pinned-group .tab {
+  background-color: var(--arc-tile-bg);
+  border-radius: var(--arc-tile-radius);
+}
+#browser.tabs-left #tabs-tabbar-container .tab-wrapper.in-pinned-group .tab-header.in-pinned-group { background-color: transparent; }
+#browser.tabs-left #tabs-tabbar-container .tab-position .tab-wrapper.in-pinned-group:hover .tab:not(.active, .tab-acceptsdrop) {
+  background-color: var(--arc-pressed-bg);
+}
+/* Hairline under the grid, drawn as a background: no extra box, no pseudo element. */
+#browser.tabs-left #tabs-tabbar-container.horizontal-pinned-tabs .pinned-group {
+  background: linear-gradient(var(--arc-divider), var(--arc-divider)) no-repeat
+              left calc(var(--arc-tab-inset) + 6px) bottom 0 / calc(100% - 2 * (var(--arc-tab-inset) + 6px)) 1px;
+}
+/* Native "separator below pinned tabs" (list mode). */
+#browser.tabs-left #tabs-tabbar-container .tab-strip .separator hr {
+  border: 0;
+  border-top: 1px solid var(--arc-divider);
+  background: none;
+  margin-inline: calc(var(--arc-tab-inset) + 6px);
+}
+
+
+/* --------------------------------------------------------------------------
+   6. REGULAR TABS
+   -------------------------------------------------------------------------- */
+/* Visual inset only: the hit target stays the full-width .tab-position slot, so no
+   dead click zones appear. Colored stacks keep Vivaldi's own 0 margin. */
+#browser.tabs-left #tabs-tabbar-container .tab-position:not(.colored) > .tab-wrapper:not(.in-pinned-group) {
+  margin-inline: var(--arc-tab-inset);
+}
+/* Low specificity on purpose: Vivaldi's stack colours (.tab-position.colored) and the
+   drag-and-drop target highlight (#browser#browser .tab.tab-acceptsdrop) still win. */
+#tabs-tabbar-container .tab {
+  background-color: transparent;
+  color: var(--arc-text-primary);
+  border-radius: var(--arc-tab-radius);
+  transition: background-color var(--arc-motion-duration) var(--arc-motion-ease),
+              box-shadow var(--arc-motion-duration) var(--arc-motion-ease);
+}
+#tabs-tabbar-container .tab-header:not(.in-pinned-group) { padding-left: 6px; }
+#tabs-tabbar-container .tab .title {
+  font-size: var(--arc-font-size);
+  font-weight: var(--arc-font-weight);
+  padding-left: 6px;
+}
+/* Vivaldi dims inactive titles to .65; Arc keeps them close to full contrast. */
+#tabs-tabbar-container .tab:not(.active) .title { opacity: .82; }
+#tabs-tabbar-container .tab-wrapper:hover .tab .title { opacity: 1; }
+#tabs-tabbar-container .tab .close { border-radius: 6px; }
+
+/* "+ New Tab" row. This is Vivaldi's real New Tab button; the label is the button's own
+   localized aria-label rendered inside the button, so the whole row is clickable. */
+#browser.tabs-left #tabs-container .toolbar-tabbar-after .button-toolbar.newtab > .ToolbarButton-Button {
+  justify-content: flex-start;
+  gap: 8px;
+  padding-inline: calc(var(--arc-tab-inset) + 1px) 8px;
+  color: var(--arc-text-muted);
+  border-radius: var(--arc-tab-radius);
+}
+#browser.tabs-left #tabs-container .toolbar-tabbar-after .button-toolbar.newtab > .ToolbarButton-Button > .button-icon {
+  flex: 0 0 auto;
+  width: 18px;
+}
+#browser.tabs-left #tabs-container .toolbar-tabbar-after .button-toolbar.newtab > .ToolbarButton-Button::after {
+  content: attr(aria-label);
+  font-size: var(--arc-font-size);
+  font-weight: var(--arc-font-weight);
+}
+
+
+/* --------------------------------------------------------------------------
+   7. ACTIVE / HOVER / FOCUS
+   Keyboard focus keeps Vivaldi's own :focus-visible outline (not overridden).
+   -------------------------------------------------------------------------- */
+#browser #tabs-tabbar-container .tab-position:not(.colored) .tab-wrapper:hover .tab:not(.active, .tab-acceptsdrop) {
+  background-color: var(--arc-hover-bg);
+  color: var(--arc-text-primary);
+}
+#browser #tabs-tabbar-container .tab.active:not(.tab-acceptsdrop) {
+  background-color: var(--arc-active-tab-bg);
+  color: var(--arc-text-primary);
+  box-shadow: var(--arc-active-shadow);
+  border-radius: var(--arc-active-radius);
+}
+/* Collapsed accordion stack containing the active tab: Vivaldi paints it with the page
+   accent colour; use the Arc active surface instead (non-colored stacks only). */
+#browser.tabs-left .tab-position.accordion-toggle-arrow.closed.active:not(.colored) {
+  background-color: var(--arc-active-tab-bg);
+  color: var(--arc-text-primary);
+}
+
+
+/* --------------------------------------------------------------------------
+   8. WORKSPACE UI — styled like Arc's Space title. Move the button to the bottom of the
+   sidebar with the Toolbar Editor (README §3) rather than with CSS.
+   -------------------------------------------------------------------------- */
+#browser.tabs-left .tabbar-workspace-button .button-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--arc-text-muted);
+}
+
+
+/* --------------------------------------------------------------------------
+   9. PANELS AND POPOVERS
+   -------------------------------------------------------------------------- */
+#browser .OmniDropdown {
+  background-color: var(--arc-popover-bg);
+  border-radius: var(--arc-popover-radius);
+  box-shadow: var(--arc-popover-shadow);
+}
+#browser .ToolbarButtonPopup-DefaultStyles { border-radius: var(--arc-popover-radius); }
+#browser .StatusInfo-Content {
+  border-color: transparent;
+  border-radius: var(--arc-button-radius);
+  box-shadow: var(--arc-popover-shadow);
+}
+#browser > .auto-hide-wrapper.right { border-radius: var(--arc-popover-radius); }
+
+
+/* --------------------------------------------------------------------------
+   10. LIGHT / DARK THEMES
+   Vivaldi sets .theme-light / .theme-dark on #browser from the *Vivaldi* theme's
+   lightness (not from prefers-color-scheme), so the palette follows the theme in use.
+   Dark values are estimates (no measurable official dark screenshot, see references.md).
+   -------------------------------------------------------------------------- */
+#browser.theme-dark {
+  --arc-frame-base:     #1f1f22;
+  --arc-tint-strength:  7%;
+  --arc-input-bg:       rgb(255 255 255 / .07);
+  --arc-tile-bg:        rgb(255 255 255 / .07);
+  --arc-hover-bg:       rgb(255 255 255 / .055);
+  --arc-pressed-bg:     rgb(255 255 255 / .09);
+  --arc-active-tab-bg:  rgb(255 255 255 / .12);
+  --arc-divider:        rgb(255 255 255 / .08);
+  --arc-popover-bg:     #2a2a2e;
+  --arc-text-primary:   #f2f2f4;
+  --arc-text-secondary: #d6d6db;
+  --arc-text-muted:     #9a9aa3;
+  --arc-accent:         color-mix(in oklab, var(--arc-tint) 80%, #fff);
+  --arc-active-shadow:  0 1px 2px rgb(0 0 0 / .3);
+  --arc-content-shadow: 0 0 0 .5px rgb(255 255 255 / .06), 0 1px 4px rgb(0 0 0 / .35);
+  --arc-popover-shadow: 0 0 0 .5px rgb(255 255 255 / .08), 0 8px 24px rgb(0 0 0 / .45);
+}
+
+/* Palette mode "theme": every colour token comes from the active Vivaldi theme
+   (Theme Editor stays fully in charge; background images are kept). */
+@container style(--arc-palette-mode: theme) {
+  #browser.theme-light,
+  #browser.theme-dark {
+    --arc-frame-bg:       var(--colorBg);
+    --arc-input-bg:       color-mix(in srgb, var(--colorFg) 8%, transparent);
+    --arc-tile-bg:        color-mix(in srgb, var(--colorFg) 8%, transparent);
+    --arc-hover-bg:       color-mix(in srgb, var(--colorFg) 6%, transparent);
+    --arc-pressed-bg:     color-mix(in srgb, var(--colorFg) 10%, transparent);
+    --arc-active-tab-bg:  color-mix(in srgb, var(--colorBgIntense) 80%, transparent);
+    --arc-divider:        color-mix(in srgb, var(--colorFg) 10%, transparent);
+    --arc-popover-bg:     var(--colorBgIntense);
+    --arc-text-primary:   var(--colorFg);
+    --arc-text-secondary: var(--colorFg);
+    --arc-text-muted:     var(--colorFgFaded);
+    --arc-accent:         var(--colorHighlightBg);
+  }
+}
+
+
+/* --------------------------------------------------------------------------
+   11. RESPONSIVE / COMPACT
+   Enable with body { --arc-compact: 1; } (section 0). Suggested sidebar width ≈ 208px
+   (exactly four favorite tiles per row).
+   -------------------------------------------------------------------------- */
+@container style(--arc-compact: 1) {
+  #browser {
+    --arc-ui-gap:         6px;
+    --arc-sidebar-pad:    4px;
+    --arc-tab-inset:      3px;
+    --arc-font-size:      12px;
+    --arc-content-radius: 8px;
+    --arc-input-radius:   8px;
+    --arc-tile-radius:    8px;
+  }
+}
+@media (max-width: 900px) {
+  #browser { --arc-ui-gap: 4px; }
+}
+
+
+/* --------------------------------------------------------------------------
+   12. AUTO-HIDE OVERRIDES (Mode B)
+   Uses Vivaldi's own auto-hide (Settings > Appearance > Auto-hide UI → Tab Bar).
+   Vivaldi already slides .auto-hide-wrapper with a transform; only its surface changes.
+   -------------------------------------------------------------------------- */
+#browser.tabs-left > .auto-hide-wrapper.left.has-tabbar {
+  background-color: var(--arc-frame-bg);
+  border-radius: var(--arc-popover-radius);
+  box-shadow: var(--arc-popover-shadow);
+}
+
+
+/* --------------------------------------------------------------------------
+   13. ACCESSIBILITY / REDUCED MOTION
+   -------------------------------------------------------------------------- */
+@media (prefers-contrast: more) {
+  #browser.theme-light,
+  #browser.theme-dark {
+    --arc-divider:    currentColor;
+    --arc-text-muted: var(--arc-text-secondary);
+  }
+  #browser #tabs-tabbar-container .tab.active:not(.tab-acceptsdrop) { outline: 1px solid currentColor; outline-offset: -1px; }
+  #browser.tabs-left #tabs-tabbar-container #tabs-container .UrlBar-AddressField { border-color: currentColor; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #browser #tabs-tabbar-container .tab,
+  #browser #tabs-container .ToolbarButton-Button,
+  #browser #tabs-container .UrlBar-AddressField,
+  #browser #tabs-container .UrlBar-AddressField .toolbar-insideinput { transition: none; }
+}
+
+
+/* --------------------------------------------------------------------------
+   14. COMPATIBILITY / FALLBACKS
+   - Scope: the CSS-mods sheet is only linked into Vivaldi's window.html, never into
+     web pages, and every rule is anchored on #browser / #tabs-tabbar-container.
+   - Everything outside .tabs-left (other layouts) is left almost untouched.
+   - No :has() support → auto-hide card margin and page-action dimming are skipped.
+   - No style-query support → section 0 toggles are ignored, defaults apply.
+   - Windows/macOS: no OS-specific rules; window controls are Vivaldi's native ones.
+   ========================================================================== */

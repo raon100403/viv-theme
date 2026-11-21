@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Arc Close Tab",
+  "version": "1.0.0",
+  "description": "Close regular tabs; for pinned tabs, switch away and hibernate (unload) them instead of closing.",
+  "permissions": [
+    "tabs"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Close tab / hibernate pinned tab"
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Alt+W"
+      },
+      "description": "Close tab / hibernate pinned tab"
+    }
+  }
+}
